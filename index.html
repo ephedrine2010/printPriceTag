@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Web print prices</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+    <header class="app-header">
+        <h1>Print prices lookup</h1>
+        
+    </header>
+
+    <main>
+        <div class="top-row-cards">
+            <section class="card card--top-col" aria-labelledby="step1-title">
+                <h2 id="step1-title"><span class="step-num">1</span> Master file</h2>
+                <div class="row-actions row-actions--master row-actions--master-file">
+                    <button type="button" class="btn btn-primary" id="btn-pick-master-file">Choose items.csv</button>
+                    <span id="master-spinner" class="master-spinner" hidden aria-hidden="true"></span>
+                    <div id="master-status" class="status-pill" role="status"></div>
+                </div>
+            </section>
+
+            <section class="card card--top-col" aria-labelledby="step2-title">
+                <h2 id="step2-title"><span class="step-num">2</span>Select Prices File</h2>
+                <div class="row-actions row-actions--query">
+                    <div class="file-input-wrap">
+                        <input type="file" id="query-file" accept=".csv,text/csv,text/plain" />
+                        <label class="file-input-label" for="query-file">Choose prices file</label>
+                    </div>
+                    <input type="checkbox" id="chk-vat-inclusive" checked hidden />
+                    <button type="button" class="btn btn-secondary" id="btn-run-query" disabled>Load</button>
+                </div>
+            </section>
+        </div>
+
+        <section class="card" aria-labelledby="quick-title">
+            <h2 id="quick-title" class="card-title-inline">Add Item Manually</h2>
+            
+            <div class="row-actions row-actions--manual">
+                <input
+                    type="text"
+                    id="manual-code"
+                    class="input-text"
+                    placeholder="Barcode, SKU, or GTIN"
+                    autocomplete="off"
+                    spellcheck="false"
+                    disabled
+                />
+                <button type="button" class="btn btn-secondary" id="btn-manual-lookup" disabled>Lookup</button>
+            </div>
+        </section>
+
+        <section class="card" id="results-section" hidden aria-labelledby="step3-title">
+            <div class="results-head">
+                <h2 id="step3-title"><span class="step-num">3</span> Results</h2>
+                <span id="results-meta"></span>
+                <div class="results-actions">
+                    <button type="button" class="btn btn-ghost" id="btn-print-tags" disabled>Print tags</button>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="results">
+                    <thead>
+                        <tr>
+                            <th>Query</th>
+                            <th>Status</th>
+                            <th>Name (EN)</th>
+                            <th>Name (AR)</th>
+                            <th>Price</th>
+                            <th>VAT %</th>
+                            <th class="results-col-remove" scope="col"><span class="visually-hidden">Remove</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

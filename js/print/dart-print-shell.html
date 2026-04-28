@@ -73,12 +73,11 @@
             padding: 8px 15px 15px 8px;
             max-width: 220px;
             width: 220px;
-            height: 80px;
-            max-height: 80px;
+            height: 96px;
+            max-height: 96px;
             border-width: 1px;
             border-color: LightGray;
             border-style: solid;
-            box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
             text-align: center;
             vertical-align: central;
             flex: auto;
@@ -310,7 +309,7 @@ function LargeSizeTagHTML(item) {
 
                       <tr>
                           <td colspan="2" style="text-align:left">
-                              <div style="font-weight: bold; font-size: 8px; -webkit-transform: translate(0,-15px) ">
+                              <div style="font-weight: bold; font-size: 9px; -webkit-transform: translate(0,-15px) ">
                                 ${item.eng_name}
                               </div>
 
@@ -318,7 +317,7 @@ function LargeSizeTagHTML(item) {
                       </tr>
                       <tr>
                           <td colspan="2" style="text-align:left">
-                              <div style="font-weight: bold; font-size: 8px; -webkit-transform: translate(0,-15px) ">
+                              <div style="font-weight: bold; font-size: 9px; -webkit-transform: translate(0,-15px) ">
                                 ${item.ar_name}
                               </div>
 
@@ -331,7 +330,7 @@ function LargeSizeTagHTML(item) {
             </div>
 
               <!-- barcode dive -->
-                <div class="div-vertical">
+                <div class="div-vertical" style="-webkit-transform: translate(10px,8px); transform: translate(10px,8px);">
                     <div class="fa-rotate-90">
                         <img src="${item.item_barcode}" alt="qrocde" style="height: 15px; width: 70px; -webkit-transform: translate(-15px,0)" />
                         <br />

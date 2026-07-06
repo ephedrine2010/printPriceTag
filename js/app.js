@@ -3,6 +3,7 @@ import { extractQueryCodes } from './query-processor.js';
 import { runLookups } from './results-export.js';
 import { lookupRowIndex, priceWithVat } from './search-logic.js';
 import { openPriceTagsPrint } from './print/open-price-tags-print.js';
+import { fetchNahdiPrice, nahdiEnabled } from './nahdi-price.js';
 
 (function () {
     var masterIndexes = null;
@@ -166,18 +167,32 @@ import { openPriceTagsPrint } from './print/open-price-tags-print.js';
         }
     }
 
+    function priceCellHtml(r) {
+        if (r._fetchingPrice) {
+            return '<span title="Fetching price from Nahdi…">…</span>';
+        }
+        if (r.price === '' || r.price == null) {
+            return '—';
+        }
+        var html = escapeHtml(String(r.price));
+        if (r.priceSource === 'nahdi') {
+            html +=
+                ' <span class="badge badge-online" title="Price fetched from Nahdi online (master price was empty)">online</span>';
+        }
+        return html;
+    }
+
     function resultRowToTr(r, rowIndex) {
         var tr = document.createElement('tr');
         if (r.status !== 'found') tr.className = 'row-miss';
+        else if (r.priceSource === 'nahdi') tr.className = 'row-nahdi';
         tr.innerHTML =
             '<td class="mono">' +
             escapeHtml(r.query) +
             '</td>' +
-            '<td><span class="badge ' +
-            (r.status === 'found' ? 'badge-ok' : 'badge-miss') +
-            '">' +
-            (r.status === 'found' ? 'Found' : 'Not found') +
-            '</span></td>' +
+            '<td class="mono">' +
+            (r.sku ? escapeHtml(String(r.sku)) : '—') +
+            '</td>' +
             '<td>' +
             escapeHtml(r.nameEn) +
             '</td>' +
@@ -185,7 +200,7 @@ import { openPriceTagsPrint } from './print/open-price-tags-print.js';
             escapeHtml(r.nameAr) +
             '</td>' +
             '<td class="num">' +
-            (r.price === '' ? '—' : escapeHtml(String(r.price))) +
+            priceCellHtml(r) +
             '</td>' +
             '<td class="num">' +
             escapeHtml(String(r.vat)) +
@@ -263,6 +278,69 @@ import { openPriceTagsPrint } from './print/open-price-tags-print.js';
         elResultsSection.hidden = false;
     }
 
+    function updateRowTr(rowObj) {
+        var i = lastResults.indexOf(rowObj);
+        if (i < 0) return;
+        var oldTr = elResultsBody.children[i];
+        if (!oldTr) return;
+        elResultsBody.replaceChild(resultRowToTr(rowObj, i), oldTr);
+    }
+
+    /**
+     * For every found row whose master price is empty, look the price up by SKU
+     * through the Nahdi proxy and fill it in. Runs with limited concurrency so
+     * we never burst the endpoint. No-op when the proxy URL is not configured.
+     */
+    async function autoFillMissingPrices() {
+        if (!nahdiEnabled()) return;
+
+        var targets = [];
+        var i;
+        for (i = 0; i < lastResults.length; i++) {
+            var r = lastResults[i];
+            if (
+                r.status === 'found' &&
+                (r.price === '' || r.price == null) &&
+                r.sku &&
+                !r._priceTried
+            ) {
+                r._priceTried = true;
+                r._fetchingPrice = true;
+                targets.push(r);
+            }
+        }
+        if (!targets.length) return;
+
+        for (i = 0; i < targets.length; i++) updateRowTr(targets[i]);
+
+        var next = 0;
+        var CONCURRENCY = 4;
+
+        async function runner() {
+            while (next < targets.length) {
+                var row = targets[next++];
+                try {
+                    var price = await fetchNahdiPrice(row.sku);
+                    if (price != null) {
+                        row.price = price;
+                        row.priceSource = 'nahdi';
+                    }
+                } catch (err) {
+                    console.error('Nahdi price fetch failed for SKU', row.sku, err);
+                }
+                row._fetchingPrice = false;
+                updateRowTr(row);
+                updateResultsMeta();
+                updatePrintTagsButton();
+            }
+        }
+
+        var runners = [];
+        var c = Math.min(CONCURRENCY, targets.length);
+        for (i = 0; i < c; i++) runners.push(runner());
+        await Promise.all(runners);
+    }
+
     function escapeHtml(s) {
         return String(s)
             .replace(/&/g, '&amp;')
@@ -294,6 +372,7 @@ import { openPriceTagsPrint } from './print/open-price-tags-print.js';
                 nameAr: '',
                 price: '',
                 vat: '',
+                sku: '',
             };
         } else {
             var row = masterIndexes.rows[ix];
@@ -305,12 +384,14 @@ import { openPriceTagsPrint } from './print/open-price-tags-print.js';
                 nameAr: row.nameAr,
                 price: p != null ? p : '',
                 vat: row.vat,
+                sku: row.sku || '',
             };
         }
 
         appendResultRows([one]);
         elManualCode.value = '';
         elManualCode.focus();
+        autoFillMissingPrices();
     }
 
     function onRunQuery() {
@@ -335,6 +416,7 @@ import { openPriceTagsPrint } from './print/open-price-tags-print.js';
             }
             var vatOn = elVatInclusive.checked;
             renderResults(runLookups(codes, masterIndexes, vatOn));
+            autoFillMissingPrices();
         };
         reader.readAsText(f, 'UTF-8');
     }
@@ -373,6 +455,7 @@ import { openPriceTagsPrint } from './print/open-price-tags-print.js';
             return r.query;
         });
         renderResults(runLookups(codes, masterIndexes, elVatInclusive.checked));
+        autoFillMissingPrices();
     });
     elPrintTags.addEventListener('click', onPrintTags);
 

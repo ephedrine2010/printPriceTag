@@ -28,6 +28,7 @@ export function runLookups(codes, indexes, vatRequired) {
                 nameAr: row.nameAr,
                 price: p != null ? p : '',
                 vat: row.vat,
+                sku: row.sku || '',
             });
         } else {
             out.push({
@@ -37,6 +38,7 @@ export function runLookups(codes, indexes, vatRequired) {
                 nameAr: '',
                 price: '',
                 vat: '',
+                sku: '',
             });
         }
     }

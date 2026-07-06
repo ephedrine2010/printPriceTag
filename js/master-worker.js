@@ -43,6 +43,7 @@ self.onmessage = function (ev) {
             nameAr: c[COL.NAME_AR] || '',
             itemPrice: c[COL.ITEM_PRICE],
             vat: c[COL.VAT],
+            sku: skuRaw,
         });
 
         if (byBarcodeStr[barcodeRaw] === undefined) {

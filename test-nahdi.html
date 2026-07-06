@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nahdi API test</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+  input, button { font-size: 1rem; padding: .5rem .7rem; }
+  input { width: 12rem; }
+  pre { background: #111; color: #ddd; padding: 1rem; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
+  .ok { color: #0a0; } .err { color: #c00; }
+  h1 { font-size: 1.2rem; }
+</style>
+</head>
+<body>
+  <h1>Nahdi price API — browser fetch test</h1>
+  <p>Enter a real 9-digit SKU that exists in your master, then click Fetch.
+     This tells us (a) whether the browser lets us read the response, and
+     (b) exactly which fields the JSON contains.</p>
+  <p>
+    <input id="sku" placeholder="e.g. 123456789" value="">
+    <button id="go">Fetch price</button>
+  </p>
+  <p id="status"></p>
+  <pre id="out">(result will appear here)</pre>
+
+<script>
+const API = 'https://www.nahdionline.com/api/analytics/product';
+
+document.getElementById('go').addEventListener('click', async () => {
+  const sku = document.getElementById('sku').value.trim();
+  const statusEl = document.getElementById('status');
+  const outEl = document.getElementById('out');
+  if (!sku) { statusEl.textContent = 'Enter a SKU first.'; return; }
+
+  const url = API + '?skus=' + encodeURIComponent(sku)
+            + '&language=en&region=SA&category_id=15125';
+
+  statusEl.textContent = 'Requesting ' + url + ' ...';
+  outEl.textContent = '';
+
+  try {
+    const t0 = performance.now();
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const ms = Math.round(performance.now() - t0);
+    const text = await res.text();
+    statusEl.innerHTML = '<span class="ok">HTTP ' + res.status + '</span> in ' + ms + 'ms';
+    let pretty = text;
+    try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (_) {}
+    outEl.textContent = pretty;
+  } catch (err) {
+    // A CORS block surfaces here as a TypeError "Failed to fetch"
+    statusEl.innerHTML = '<span class="err">FETCH FAILED</span> — '
+      + (err && err.message ? err.message : String(err))
+      + '  (open DevTools → Console/Network to confirm if it is a CORS block)';
+    outEl.textContent = String(err && err.stack ? err.stack : err);
+  }
+});
+</script>
+</body>
+</html>

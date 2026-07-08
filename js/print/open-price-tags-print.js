@@ -16,7 +16,7 @@ async function getShellTemplate() {
 }
 
 /**
- * @param {{ query: string, status: string, nameEn: string, nameAr: string, price: string|number, vat: string }} row
+ * @param {{ query: string, status: string, nameEn: string, nameAr: string, price: string|number, vat: string, isSmart?: boolean }} row
  * @returns {object}
  */
 function rowToDartItem(row) {
@@ -27,7 +27,7 @@ function rowToDartItem(row) {
         eng_name: row.nameEn || '',
         ar_name: row.nameAr || '',
         item_price: row.price,
-        is_smart: false,
+        is_smart: !!row.isSmart,
     };
 }
 

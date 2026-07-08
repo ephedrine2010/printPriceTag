@@ -3,7 +3,8 @@ import { extractQueryCodes } from './query-processor.js';
 import { runLookups } from './results-export.js';
 import { lookupRowIndex, priceWithVat } from './search-logic.js';
 import { openPriceTagsPrint } from './print/open-price-tags-print.js';
-import { fetchNahdiPrice, nahdiEnabled } from './nahdi-price.js';
+import { fetchNahdiItem, pickNahdiPrice, nahdiEnabled } from './nahdi-price.js';
+import { loadSmartBrands, isSmartBrand } from './smart-brands.js';
 
 (function () {
     var masterIndexes = null;
@@ -26,6 +27,9 @@ import { fetchNahdiPrice, nahdiEnabled } from './nahdi-price.js';
     var elResultsMeta = document.getElementById('results-meta');
 
     var lastResults = [];
+    // Latest in-flight autoFillNahdiData() promise, awaited before printing so
+    // smart-brand marks (and any online prices) are resolved on the tags.
+    var pendingNahdi = null;
 
     function setMasterStatus(text, kind) {
         elMasterStatus.textContent = text;
@@ -287,25 +291,34 @@ import { fetchNahdiPrice, nahdiEnabled } from './nahdi-price.js';
     }
 
     /**
-     * For every found row whose master price is empty, look the price up by SKU
-     * through the Nahdi proxy and fill it in. Runs with limited concurrency so
-     * we never burst the endpoint. No-op when the proxy URL is not configured.
+     * Kick off (and track) a Nahdi enrichment pass. Stored on `pendingNahdi` so
+     * printing can await it.
      */
-    async function autoFillMissingPrices() {
+    function startAutoFillNahdi() {
+        pendingNahdi = autoFillNahdiData();
+        return pendingNahdi;
+    }
+
+    /**
+     * Enrich found rows via the Nahdi API (by SKU), with limited concurrency so
+     * we never burst the endpoint:
+     *   - fill the price for rows whose master price is empty, and
+     *   - set `isSmart` from the item's brand (Nahdi has no brand in the master).
+     * Each SKU is fetched at most once (cached in nahdi-price.js). No-op when no
+     * price/brand path is available.
+     */
+    async function autoFillNahdiData() {
         if (!nahdiEnabled()) return;
+        await loadSmartBrands(); // ensure the smart list is ready before we decide isSmart
 
         var targets = [];
         var i;
         for (i = 0; i < lastResults.length; i++) {
             var r = lastResults[i];
-            if (
-                r.status === 'found' &&
-                (r.price === '' || r.price == null) &&
-                r.sku &&
-                !r._priceTried
-            ) {
-                r._priceTried = true;
-                r._fetchingPrice = true;
+            if (r.status === 'found' && r.sku && !r._nahdiTried) {
+                r._nahdiTried = true;
+                r._needPrice = r.price === '' || r.price == null;
+                if (r._needPrice) r._fetchingPrice = true;
                 targets.push(r);
             }
         }
@@ -320,13 +333,19 @@ import { fetchNahdiPrice, nahdiEnabled } from './nahdi-price.js';
             while (next < targets.length) {
                 var row = targets[next++];
                 try {
-                    var price = await fetchNahdiPrice(row.sku);
-                    if (price != null) {
-                        row.price = price;
-                        row.priceSource = 'nahdi';
+                    var obj = await fetchNahdiItem(row.sku);
+                    if (obj) {
+                        if (row._needPrice) {
+                            var price = pickNahdiPrice(obj);
+                            if (price != null) {
+                                row.price = price;
+                                row.priceSource = 'nahdi';
+                            }
+                        }
+                        row.isSmart = isSmartBrand(obj.item_brand);
                     }
                 } catch (err) {
-                    console.error('Nahdi price fetch failed for SKU', row.sku, err);
+                    console.error('Nahdi fetch failed for SKU', row.sku, err);
                 }
                 row._fetchingPrice = false;
                 updateRowTr(row);
@@ -391,7 +410,7 @@ import { fetchNahdiPrice, nahdiEnabled } from './nahdi-price.js';
         appendResultRows([one]);
         elManualCode.value = '';
         elManualCode.focus();
-        autoFillMissingPrices();
+        startAutoFillNahdi();
     }
 
     function onRunQuery() {
@@ -416,13 +435,26 @@ import { fetchNahdiPrice, nahdiEnabled } from './nahdi-price.js';
             }
             var vatOn = elVatInclusive.checked;
             renderResults(runLookups(codes, masterIndexes, vatOn));
-            autoFillMissingPrices();
+            startAutoFillNahdi();
         };
         reader.readAsText(f, 'UTF-8');
     }
 
     async function onPrintTags() {
         try {
+            // Wait for the Nahdi pass (smart-brand marks + any online prices) so
+            // tags print with the black smart box resolved rather than blank.
+            if (pendingNahdi) {
+                var prevLabel = elPrintTags.textContent;
+                elPrintTags.disabled = true;
+                elPrintTags.textContent = 'Preparing…';
+                try {
+                    await pendingNahdi;
+                } finally {
+                    elPrintTags.textContent = prevLabel;
+                    elPrintTags.disabled = false;
+                }
+            }
             await openPriceTagsPrint(lastResults);
         } catch (err) {
             console.error(err);
@@ -455,7 +487,7 @@ import { fetchNahdiPrice, nahdiEnabled } from './nahdi-price.js';
             return r.query;
         });
         renderResults(runLookups(codes, masterIndexes, elVatInclusive.checked));
-        autoFillMissingPrices();
+        startAutoFillNahdi();
     });
     elPrintTags.addEventListener('click', onPrintTags);
 

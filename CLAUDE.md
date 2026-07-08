@@ -66,6 +66,11 @@ print matched rows.
    legacy Dart print page** (`printhtmlpage.dart`) that renders barcodes with JsBarcode —
    treat it as frozen output; changing it means diverging from the reference layout.
 
+   The shell's `is_smart` flag (a small black "smart" square on the tag) is populated
+   dynamically: an item's brand is fetched from the Nahdi API (the master has no brand
+   column) and matched against the curated list in `assets/SL-updates.csv`. See
+   [documentations/smart-brand-marking.md](documentations/smart-brand-marking.md).
+
 ## Editing conventions
 
 - Keep the ported logic (barcode length rules, print shell) faithful to its Dart origin

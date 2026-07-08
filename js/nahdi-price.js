@@ -25,8 +25,9 @@ var CORS_PROXIES = [
     function (url) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url); },
 ];
 
-// sku -> resolved price (number) or null (looked up, no price). Avoids refetching.
-var priceCache = Object.create(null);
+// sku -> resolved Nahdi item object, or null (looked up, nothing usable).
+// Shared by price and brand lookups so a SKU is fetched at most once.
+var itemCache = Object.create(null);
 
 /**
  * Choose the tag price from a Nahdi product object.
@@ -83,16 +84,17 @@ function proxyUrlsForSku(sku) {
 }
 
 /**
- * Fetch a single SKU's price through a proxy. Cached per SKU. Tries each proxy
- * in turn and uses the first that returns usable JSON — same strategy as the
- * old working nahdi-api.js.
+ * Fetch a single SKU's Nahdi product object through a proxy. Cached per SKU.
+ * Tries each proxy in turn and uses the first that returns usable JSON — same
+ * strategy as the old working nahdi-api.js. Returns the product object (with
+ * `price`, `shelf_price`, `item_brand`, …) or null.
  * @param {string|number} sku
- * @returns {Promise<number|null>}
+ * @returns {Promise<object|null>}
  */
-export async function fetchNahdiPrice(sku) {
+export async function fetchNahdiItem(sku) {
     sku = String(sku == null ? '' : sku).trim();
     if (!sku) return null;
-    if (sku in priceCache) return priceCache[sku];
+    if (sku in itemCache) return itemCache[sku];
 
     var urls = proxyUrlsForSku(sku);
     var data = null;
@@ -111,14 +113,34 @@ export async function fetchNahdiPrice(sku) {
 
     if (!data) {
         console.warn('NahdiApi: all proxies failed for SKU ' + sku);
-        priceCache[sku] = null;
+        itemCache[sku] = null;
         return null;
     }
 
     var obj = Array.isArray(data) ? data[0] : data;
-    var price = obj ? pickNahdiPrice(obj) : null;
-    priceCache[sku] = price;
-    return price;
+    itemCache[sku] = obj || null;
+    return itemCache[sku];
+}
+
+/**
+ * Fetch a single SKU's tag price (see pickNahdiPrice). Cached per SKU.
+ * @param {string|number} sku
+ * @returns {Promise<number|null>}
+ */
+export async function fetchNahdiPrice(sku) {
+    var obj = await fetchNahdiItem(sku);
+    return obj ? pickNahdiPrice(obj) : null;
+}
+
+/**
+ * Fetch a single SKU's brand (`item_brand`). Cached per SKU. Returns '' when
+ * unknown.
+ * @param {string|number} sku
+ * @returns {Promise<string>}
+ */
+export async function fetchNahdiBrand(sku) {
+    var obj = await fetchNahdiItem(sku);
+    return obj && obj.item_brand != null ? String(obj.item_brand) : '';
 }
 
 /**

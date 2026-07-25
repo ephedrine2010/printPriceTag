@@ -431,6 +431,22 @@ table.results th.results-col-remove {
     font-variant-numeric: tabular-nums;
 }
 
+.cell-barcode {
+    white-space: nowrap;
+}
+
+/* Small CODE128 preview drawn by JsBarcode under the code. */
+.row-barcode {
+    display: block;
+    height: 22px;
+    max-width: 100%;
+    margin-top: 0.25rem;
+}
+
+table.results tr.row-miss .row-barcode {
+    opacity: 0.45;
+}
+
 .badge {
     display: inline-block;
     padding: 0.15rem 0.45rem;

@@ -16,13 +16,16 @@ async function getShellTemplate() {
 }
 
 /**
- * @param {{ query: string, status: string, nameEn: string, nameAr: string, price: string|number, vat: string, isSmart?: boolean }} row
+ * @param {{ query: string, display?: string, status: string, nameEn: string, nameAr: string, price: string|number, vat: string, isSmart?: boolean }} row
  * @returns {object}
  */
 function rowToDartItem(row) {
     var vat = parseFloat(row.vat);
+    // Same code the results table shows: GTIN (or master barcode) when the
+    // query was a SKU / an over-long code — see displayCode in search-logic.js.
+    var code = row.display != null && row.display !== '' ? row.display : row.query;
     return {
-        nat_barcode: String(row.query),
+        nat_barcode: String(code),
         vat: isNaN(vat) ? 0 : vat,
         eng_name: row.nameEn || '',
         ar_name: row.nameAr || '',

@@ -44,6 +44,8 @@ self.onmessage = function (ev) {
             itemPrice: c[COL.ITEM_PRICE],
             vat: c[COL.VAT],
             sku: skuRaw,
+            barcode: barcodeRaw,
+            gtin: gtinRaw,
         });
 
         if (byBarcodeStr[barcodeRaw] === undefined) {

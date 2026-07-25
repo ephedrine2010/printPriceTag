@@ -1,7 +1,7 @@
 import { MASTER_FILENAME } from './config.js';
 import { extractQueryCodes } from './query-processor.js';
 import { runLookups } from './results-export.js';
-import { lookupRowIndex, priceWithVat } from './search-logic.js';
+import { lookupRowIndex, priceWithVat, displayCode } from './search-logic.js';
 import { openPriceTagsPrint } from './print/open-price-tags-print.js';
 import { fetchNahdiItem, pickNahdiPrice, nahdiEnabled } from './nahdi-price.js';
 import { loadSmartBrands, isSmartBrand } from './smart-brands.js';
@@ -186,13 +186,45 @@ import { loadSmartBrands, isSmartBrand } from './smart-brands.js';
         return html;
     }
 
+    function rowCode(r) {
+        return r.display != null && r.display !== '' ? r.display : r.query;
+    }
+
+    /**
+     * Draw the small CODE128 barcode under the code in the Barcode column,
+     * using the same JsBarcode build the print shell loads. Silently drops the
+     * <svg> when the library is missing or the code is not encodable.
+     */
+    function renderRowBarcode(tr, code) {
+        var svg = tr.querySelector('.row-barcode');
+        if (!svg) return;
+        if (!code || typeof window.JsBarcode !== 'function') {
+            svg.parentNode.removeChild(svg);
+            return;
+        }
+        try {
+            window.JsBarcode(svg, String(code), {
+                format: 'CODE128',
+                displayValue: false,
+                width: 1,
+                height: 22,
+                margin: 0,
+                background: 'transparent',
+            });
+        } catch (err) {
+            svg.parentNode.removeChild(svg);
+        }
+    }
+
     function resultRowToTr(r, rowIndex) {
         var tr = document.createElement('tr');
         if (r.status !== 'found') tr.className = 'row-miss';
         else if (r.priceSource === 'nahdi') tr.className = 'row-nahdi';
+        var code = rowCode(r);
         tr.innerHTML =
-            '<td class="mono">' +
-            escapeHtml(r.query) +
+            '<td class="mono cell-barcode">' +
+            escapeHtml(code) +
+            '<svg class="row-barcode" aria-hidden="true"></svg>' +
             '</td>' +
             '<td class="mono">' +
             (r.sku ? escapeHtml(String(r.sku)) : '—') +
@@ -214,6 +246,7 @@ import { loadSmartBrands, isSmartBrand } from './smart-brands.js';
             rowIndex +
             '" aria-label="Remove this row">Remove</button>' +
             '</td>';
+        renderRowBarcode(tr, code);
         return tr;
     }
 
@@ -386,6 +419,7 @@ import { loadSmartBrands, isSmartBrand } from './smart-brands.js';
         if (ix < 0) {
             one = {
                 query: raw,
+                display: raw,
                 status: 'not_found',
                 nameEn: '',
                 nameAr: '',
@@ -398,6 +432,7 @@ import { loadSmartBrands, isSmartBrand } from './smart-brands.js';
             var p = priceWithVat(row, vatOn);
             one = {
                 query: raw,
+                display: displayCode(row, raw),
                 status: 'found',
                 nameEn: row.nameEn,
                 nameAr: row.nameAr,

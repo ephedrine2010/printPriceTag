@@ -1,4 +1,4 @@
-import { lookupRowIndex, priceWithVat } from './search-logic.js';
+import { lookupRowIndex, priceWithVat, displayCode } from './search-logic.js';
 
 /**
  * @param {string[]} codes
@@ -23,6 +23,7 @@ export function runLookups(codes, indexes, vatRequired) {
             p = priceWithVat(row, vatRequired);
             out.push({
                 query: code,
+                display: displayCode(row, code),
                 status: 'found',
                 nameEn: row.nameEn,
                 nameAr: row.nameAr,
@@ -33,6 +34,7 @@ export function runLookups(codes, indexes, vatRequired) {
         } else {
             out.push({
                 query: code,
+                display: code,
                 status: 'not_found',
                 nameEn: '',
                 nameAr: '',

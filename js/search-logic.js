@@ -62,6 +62,33 @@ export function lookupRowIndex(indexes, rawCode) {
 }
 
 /**
+ * Code to show in the Query column for a matched row.
+ *
+ * When the queried code is the item's SKU, or is longer than 16 chars (the same
+ * threshold extractBarcode truncates at), it is not a usable barcode — show the
+ * item's GTIN instead. A GTIN of "-" is a placeholder in the master, so fall
+ * back to the item's barcode column. Unmatched queries are shown as typed.
+ *
+ * @param {object|null} row — { sku, barcode, gtin, ... }
+ * @param {string} rawCode
+ * @returns {string}
+ */
+export function displayCode(row, rawCode) {
+    const code = String(rawCode).trim();
+    if (!row) return code;
+
+    const sku = row.sku ? String(row.sku).trim() : '';
+    const isSku = sku !== '' && code === sku;
+    if (!isSku && code.length <= 16) return code;
+
+    const gtin = row.gtin ? String(row.gtin).trim() : '';
+    if (gtin && gtin !== '-') return gtin;
+
+    const barcode = row.barcode ? String(row.barcode).trim() : '';
+    return barcode || code;
+}
+
+/**
  * @param {object} row — { nameEn, nameAr, itemPrice, vat }
  * @param {boolean} vatRequired
  */

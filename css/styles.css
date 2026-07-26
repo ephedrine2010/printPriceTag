@@ -435,6 +435,54 @@ table.results th.results-col-remove {
     white-space: nowrap;
 }
 
+.barcode-line {
+    display: flex;
+    align-items: center;
+    /* two monospace characters wide */
+    gap: 2ch;
+}
+
+.btn-copy-code {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: #fff;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 0;
+}
+
+.btn-copy-code svg {
+    width: 11px;
+    height: 11px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.btn-copy-code:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
+}
+
+.btn-copy-code:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.btn-copy-code.is-copied {
+    color: #16a34a;
+    border-color: #16a34a;
+}
+
 /* Small CODE128 preview drawn by JsBarcode under the code. */
 .row-barcode {
     display: block;

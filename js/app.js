@@ -186,8 +186,51 @@ import { loadSmartBrands, isSmartBrand } from './smart-brands.js';
         return html;
     }
 
+    var COPY_ICON =
+        '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">' +
+        '<rect x="5.5" y="5.5" width="8" height="9" rx="1.5" />' +
+        '<path d="M10.5 3.5v-1a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h1" />' +
+        '</svg>';
+
     function rowCode(r) {
         return r.display != null && r.display !== '' ? r.display : r.query;
+    }
+
+    /**
+     * Clipboard write with a fallback for non-secure origins (plain http on a
+     * LAN address), where navigator.clipboard is undefined.
+     */
+    function copyText(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(text);
+        }
+        return new Promise(function (resolve, reject) {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            var ok = false;
+            try {
+                ok = document.execCommand('copy');
+            } catch (err) {
+                ok = false;
+            }
+            document.body.removeChild(ta);
+            if (ok) resolve();
+            else reject(new Error('Copy not supported in this browser.'));
+        });
+    }
+
+    function flashCopied(btn) {
+        btn.classList.add('is-copied');
+        if (btn._copyTimer) clearTimeout(btn._copyTimer);
+        btn._copyTimer = setTimeout(function () {
+            btn.classList.remove('is-copied');
+            btn._copyTimer = null;
+        }, 1200);
     }
 
     /**
@@ -223,7 +266,20 @@ import { loadSmartBrands, isSmartBrand } from './smart-brands.js';
         var code = rowCode(r);
         tr.innerHTML =
             '<td class="mono cell-barcode">' +
+            '<span class="barcode-line">' +
+            '<span class="barcode-code">' +
             escapeHtml(code) +
+            '</span>' +
+            (code
+                ? '<button type="button" class="btn-copy-code" data-code="' +
+                  escapeHtml(code) +
+                  '" title="Copy barcode" aria-label="Copy barcode ' +
+                  escapeHtml(code) +
+                  '">' +
+                  COPY_ICON +
+                  '</button>'
+                : '') +
+            '</span>' +
             '<svg class="row-barcode" aria-hidden="true"></svg>' +
             '</td>' +
             '<td class="mono">' +
@@ -527,6 +583,22 @@ import { loadSmartBrands, isSmartBrand } from './smart-brands.js';
     elPrintTags.addEventListener('click', onPrintTags);
 
     elResultsBody.addEventListener('click', function (e) {
+        var copyBtn =
+            e.target && e.target.closest && e.target.closest('.btn-copy-code');
+        if (copyBtn && elResultsBody.contains(copyBtn)) {
+            var code = copyBtn.getAttribute('data-code') || '';
+            copyText(code).then(
+                function () {
+                    flashCopied(copyBtn);
+                },
+                function (err) {
+                    console.error(err);
+                    setMasterStatus('Could not copy the barcode.', 'error');
+                }
+            );
+            return;
+        }
+
         var btn = e.target && e.target.closest && e.target.closest('.btn-remove-row');
         if (!btn || !elResultsBody.contains(btn)) {
             return;

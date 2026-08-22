@@ -11,8 +11,33 @@
 </head>
 <body>
     <header class="app-header">
-        <h1>Print prices lookup</h1>
-        
+        <div class="app-header-row">
+            <h1>Print prices lookup</h1>
+
+            <div class="site-nav" data-site-nav>
+                <button
+                    type="button"
+                    class="site-nav-btn"
+                    id="site-nav-btn"
+                    aria-haspopup="true"
+                    aria-expanded="false"
+                    aria-controls="site-nav-menu"
+                >
+                    <span>Pages</span>
+                    <svg class="site-nav-caret" viewBox="0 0 12 12" aria-hidden="true">
+                        <path d="M2.5 4.5 6 8l3.5-3.5" />
+                    </svg>
+                </button>
+                <ul class="site-nav-menu" id="site-nav-menu" role="menu" hidden>
+                    <li role="none">
+                        <a role="menuitem" href="index.html" class="is-current" aria-current="page">Print prices lookup</a>
+                    </li>
+                    <li role="none">
+                        <a role="menuitem" href="dose-calculator/index.html">Dose calculator</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
     </header>
 
     <main>
@@ -85,6 +110,7 @@
 
     <!-- jsbarcode — same build the print shell uses, for the Barcode column -->
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+    <script type="module" src="js/site-nav.js"></script>
     <script type="module" src="js/app.js"></script>
 </body>
 </html>

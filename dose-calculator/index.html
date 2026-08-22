@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dose calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../css/styles.css" />
+    <link rel="stylesheet" href="css/dose-calculator.css" />
+</head>
+<body>
+    <header class="app-header">
+        <div class="app-header-row">
+            <h1>Dose calculator</h1>
+
+            <div class="site-nav" data-site-nav>
+                <button
+                    type="button"
+                    class="site-nav-btn"
+                    id="site-nav-btn"
+                    aria-haspopup="true"
+                    aria-expanded="false"
+                    aria-controls="site-nav-menu"
+                >
+                    <span>Pages</span>
+                    <svg class="site-nav-caret" viewBox="0 0 12 12" aria-hidden="true">
+                        <path d="M2.5 4.5 6 8l3.5-3.5" />
+                    </svg>
+                </button>
+                <ul class="site-nav-menu" id="site-nav-menu" role="menu" hidden>
+                    <li role="none">
+                        <a role="menuitem" href="../index.html">Print prices lookup</a>
+                    </li>
+                    <li role="none">
+                        <a role="menuitem" href="index.html" class="is-current" aria-current="page">Dose calculator</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="card">
+            <div class="search-wrap">
+                <input
+                    type="text"
+                    id="dose-search"
+                    class="input-text search-input"
+                    placeholder="Type a medicine name, or scan a barcode"
+                    autocomplete="off"
+                    spellcheck="false"
+                    role="combobox"
+                    aria-expanded="false"
+                    aria-controls="dose-suggest"
+                    aria-autocomplete="list"
+                    aria-label="Medicine name or barcode"
+                    autofocus
+                />
+                <ul class="suggest" id="dose-suggest" role="listbox" aria-label="Matching medicines" hidden></ul>
+            </div>
+
+            <div id="search-status" class="status-pill" role="status" hidden></div>
+
+            <div class="master-line">
+                <span class="master-dot" id="master-dot" aria-hidden="true"></span>
+                <span id="master-state" class="master-state"></span>
+                <button type="button" class="btn-inline" id="btn-use-master" hidden>Use it now</button>
+                <button type="button" class="btn-inline" id="btn-pick-master" hidden>Choose items.csv…</button>
+            </div>
+        </section>
+
+        <section class="card" id="inputs-card" hidden aria-labelledby="selected-name">
+            <div class="selected-head">
+                <div class="selected-info">
+                    <h2 class="selected-name" id="selected-name"></h2>
+                    <p class="selected-meta" id="selected-meta"></p>
+                </div>
+                <div class="result-box" id="result-box" data-empty="true">
+                    <span class="result-number" id="result-number">—</span>
+                    <span class="result-unit" id="result-unit"></span>
+                </div>
+            </div>
+
+            <h3 class="fields-title">Calculation details</h3>
+
+            <div class="dose-fields">
+                <label class="field" data-field="dose">
+                    <span class="field-label">
+                        Dose
+                        <em class="field-note"></em>
+                    </span>
+                    <input type="number" id="in-dose" class="input-text" inputmode="decimal" min="0" step="any" />
+                </label>
+
+                <label class="field" data-field="frequency">
+                    <span class="field-label">
+                        Frequency
+                        <em class="field-note"></em>
+                    </span>
+                    <input type="number" id="in-frequency" class="input-text" inputmode="numeric" min="0" step="any" />
+                </label>
+
+                <label class="field" data-field="days">
+                    <span class="field-label">
+                        Days
+                        <em class="field-note"></em>
+                    </span>
+                    <input type="number" id="in-days" class="input-text" inputmode="numeric" min="0" step="any" />
+                </label>
+            </div>
+
+            <div class="row-actions dose-actions">
+                <label class="chk-row">
+                    <input type="checkbox" id="chk-bupa" checked />
+                    Bupa rounding
+                </label>
+                <button type="button" class="btn btn-primary" id="btn-calculate">Calculate</button>
+            </div>
+
+            <div id="calc-error" class="status-pill error" role="alert" hidden></div>
+        </section>
+    </main>
+
+    <script type="module" src="../js/site-nav.js"></script>
+    <script type="module" src="js/dose-app.js"></script>
+</body>
+</html>

@@ -5,6 +5,7 @@ import { lookupRowIndex, priceWithVat, displayCode } from './search-logic.js';
 import { openPriceTagsPrint } from './print/open-price-tags-print.js';
 import { fetchNahdiItem, pickNahdiPrice, nahdiEnabled } from './nahdi-price.js';
 import { loadSmartBrands, isSmartBrand } from './smart-brands.js';
+import { saveMasterHandle } from './master-handle-store.js';
 
 (function () {
     var masterIndexes = null;
@@ -156,6 +157,9 @@ import { loadSmartBrands, isSmartBrand } from './smart-brands.js';
             var file = await fh.getFile();
             setMasterStatus('Reading ' + MASTER_FILENAME + ' (' + file.size.toLocaleString() + ' bytes)…', '');
             var text = await file.text();
+            // Remember the handle so the dose calculator can resolve barcodes to
+            // SKUs without asking for the file again. Best-effort only.
+            saveMasterHandle(fh);
             runMasterIndexFromText(text);
         } catch (err) {
             if (err && err.name === 'AbortError') {

@@ -1,15 +1,14 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## What this is
 
 A client-side, no-build web app that looks up product prices from a large master CSV
 (`items.csv`) and prints price tags. All logic runs in the browser — there is no
-backend, no package.json, and no dependencies to install. The only third-party libraries
-are loaded from CDNs at runtime: the print sheet pulls Bootstrap, jQuery and JsBarcode at
-print time, and [index.html](index.html) pulls the same JsBarcode build to draw the small
-barcode preview in the results table's Barcode column.
+backend, no package.json, and no dependencies to install. The print sheet is the only
+part that pulls third-party libraries (Bootstrap, jQuery, JsBarcode), and it loads them
+from CDNs at print time.
 
 ## Running / developing
 

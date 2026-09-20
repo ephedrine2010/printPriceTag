@@ -128,8 +128,8 @@ The brand feature is layered onto the existing Nahdi price fallback and shares i
 ## 8. Notes & limits
 
 - **Depends on the Nahdi API.** Brand discovery uses the same CORS-proxied Nahdi endpoint
-  as the price fallback (see [nahdi-price-fallback.md](./nahdi-price-fallback.md)). If those
-  proxies are down or a SKU is unknown to Nahdi, the brand cannot be resolved and the item
+  as the price fallback (see [nahdi-price-fallback.md](./nahdi-price-fallback.md)). If that
+  Worker is down or a SKU is unknown to Nahdi, the brand cannot be resolved and the item
   is **not** marked smart (fail-safe: no false squares).
 - **Items with no SKU are never marked** — there is no brand source for them.
 - **More API calls than price-only.** Marking requires a Nahdi call for every found item

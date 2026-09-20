@@ -68,9 +68,38 @@ print matched rows.
    treat it as frozen output; changing it means diverging from the reference layout.
 
    The shell's `is_smart` flag (a small black "smart" square on the tag) is populated
-   dynamically: an item's brand is fetched from the Nahdi API (the master has no brand
-   column) and matched against the curated list in `assets/SL-updates.csv`. See
+   dynamically: an item's brand comes from the Nahdi API (see step 6, the master has no
+   brand column) and is matched against the curated list in `assets/SL-updates.csv`. See
    [documentations/smart-brand-marking.md](documentations/smart-brand-marking.md).
+
+6. **Online enrichment (Nahdi API).** After every lookup, `autoFillNahdiData()` in
+   [js/app.js](js/app.js) calls `fetchNahdiItem(sku)` in
+   [js/nahdi-price.js](js/nahdi-price.js) for each found row (max 4 concurrent) to fill a
+   **missing price** and to resolve the **brand** for smart marking. One fetch per SKU
+   serves both; results are cached per SKU for the session.
+
+   - **The Cloudflare Worker is the only route.** Nahdi returns a fixed
+     `Access-Control-Allow-Origin: https://www.nahdionline.com`, so the browser cannot
+     call it directly. Every request goes through `NAHDI_PROXY_BASE`
+     ([nahdi-proxy-worker.js](nahdi-proxy-worker.js), deployed at
+     `nahdi-proxy.ephedrine2010.workers.dev`). Public CORS proxies were tried as a
+     fallback and **removed** — corsproxy.io now needs an API key, allorigins and codetabs
+     answer `522` most of the time. Do not re-add one without measuring it first.
+   - **The deployed Worker takes `?sku=` (singular)**, not `?skus=`, which gets a
+     `400 bad sku`. The Worker source in this repo accepts both, so the deployed copy is
+     an older build — redeploy it before relying on `?skus=` batching.
+   - A SKU Nahdi does not know is cached as "nothing"; a Worker or network failure is
+     **not** cached, so re-running the lookup retries it (within one rendered result set a
+     row is tried once — `_nahdiTried`). Each request has a 10 s timeout, and concurrent
+     lookups of the same SKU share one request.
+   - Nahdi prices are already VAT-inclusive, so the VAT toggle is not re-applied to them.
+     `pickNahdiPrice()` takes the higher of `price` and `shelf_price` — that is the legacy
+     Dart behaviour, not a bug.
+   - Clearing `NAHDI_PROXY_BASE` makes the whole feature a silent no-op (`nahdiEnabled()`
+     returns `false`); prices stay `—` and nothing is marked smart.
+
+   Full detail:
+   [documentations/nahdi-price-fallback.md](documentations/nahdi-price-fallback.md).
 
 ## Second page: the dose calculator
 

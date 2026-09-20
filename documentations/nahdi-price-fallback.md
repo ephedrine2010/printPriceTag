@@ -57,20 +57,39 @@ WAF returns `403` to requests without one.
 
 ## 3. Enabling the feature
 
-1. **Deploy the Worker** (once):
-   - Cloudflare dashboard → *Workers & Pages* → *Create Worker*
-   - Paste [`nahdi-proxy-worker.js`](../nahdi-proxy-worker.js), Deploy.
-   - You get a URL like `https://nahdi-proxy.<you>.workers.dev`.
-   - Sanity check in a browser: `https://nahdi-proxy.<you>.workers.dev/?skus=100015980`
-     should return a JSON array.
-2. **Point the app at it:** set `NAHDI_PROXY_BASE` at the top of
-   [`js/nahdi-price.js`](../js/nahdi-price.js):
-   ```js
-   export const NAHDI_PROXY_BASE = 'https://nahdi-proxy.you.workers.dev';
-   ```
+The Worker is already deployed and the app already points at it — the feature works out
+of the box. `NAHDI_PROXY_BASE` at the top of [`js/nahdi-price.js`](../js/nahdi-price.js)
+holds its URL:
 
-While `NAHDI_PROXY_BASE` is empty the feature is a **silent no-op** — the app behaves
-exactly as before (empty prices stay `—`).
+```js
+export const NAHDI_PROXY_BASE = 'https://nahdi-proxy.ephedrine2010.workers.dev';
+```
+
+Sanity check in a browser: `https://nahdi-proxy.ephedrine2010.workers.dev/?sku=100015980`
+should return a JSON array. Note the deployed Worker takes **`?sku=`** (singular); `?skus=`
+gets a `400 bad sku`.
+
+To deploy your own instead: Cloudflare dashboard → *Workers & Pages* → *Create Worker*,
+paste [`nahdi-proxy-worker.js`](../nahdi-proxy-worker.js), Deploy, then put the resulting
+URL in `NAHDI_PROXY_BASE`. While `NAHDI_PROXY_BASE` is empty the feature is a **silent
+no-op** — `nahdiEnabled()` returns `false` and empty prices stay `—`.
+
+### Why there is no public-proxy fallback
+
+The Worker is the **only** route. This module previously tried public CORS proxies as a
+fallback; they were removed because none is dependable enough to be worth the wait:
+
+| Proxy | Status when measured |
+|---|---|
+| `corsproxy.io/?<url>` | `403 keyless_legacy_url` — now requires an API key |
+| `api.allorigins.win/raw?url=` | `522` on every attempt |
+| `api.allorigins.win/get?url=` | answered 1 request in 5 (rest `522`/`500`) |
+| `api.codetabs.com/v1/proxy?quest=` | `522` on every attempt |
+
+A backstop that unreliable turns a clean failure into a slow one, so a failed request now
+fails immediately rather than queueing behind a proxy that will probably time out. Each
+request has a 10 s `AbortController` timeout, and concurrent lookups of the same SKU share
+one request.
 
 ---
 
@@ -180,7 +199,6 @@ reference).
 | [`js/results-export.js`](../js/results-export.js) | carries `sku` through lookup results |
 | [`js/app.js`](../js/app.js) | `autoFillMissingPrices()` orchestration, row rendering, SKU column |
 | [`css/styles.css`](../css/styles.css) | `.badge-online`, `.row-nahdi` styles |
-| [`test-nahdi.html`](../test-nahdi.html) | throwaway page to probe the API / CORS from a browser |
 
 ---
 
@@ -188,9 +206,13 @@ reference).
 
 - **Batching** (`skus=a,b,c`) is unconfirmed — the API might return only the first match.
   Current code fetches **one SKU per request**. If batching is confirmed later, the proxy
-  already forwards a comma-separated `skus`, so only the app-side loop needs changing.
+  already forwards a comma-separated `skus`, so only the app-side loop needs changing
+  — though the **deployed** Worker is an older build that accepts only `?sku=`, so it
+  would need redeploying from [`nahdi-proxy-worker.js`](../nahdi-proxy-worker.js) first.
 - Rows with **no SKU** or a SKU that Nahdi does not know stay `—` and, if printed, still
   render a blank-price tag. If that is undesirable, exclude still-empty found rows from
   printing.
+- A SKU Nahdi does not know is cached as “no price”; a Worker/network failure is **not**
+  cached, so a later lookup retries it.
 - The feature depends on an external service; if Nahdi changes the endpoint, WAF rules,
   or response shape, `pickNahdiPrice()` and the Worker are the two places to adjust.

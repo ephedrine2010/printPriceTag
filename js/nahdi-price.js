@@ -2,32 +2,31 @@
  * On-demand price fallback via the Nahdi product API.
  *
  * Used when an item IS found in the master but its price cell is empty. We look
- * the item up by SKU through the Nahdi API (which only allows its own origin,
- * so a browser page cannot call it directly) and read the retail price from the
+ * the item up by SKU through the Nahdi API and read the retail price from the
  * response.
  *
- * Two ways past CORS, tried in order:
- *   1. NAHDI_PROXY_BASE — an optional self-hosted Cloudflare Worker (most
- *      reliable; see nahdi-proxy-worker.js). Leave empty to skip.
- *   2. CORS_PROXIES — public CORS proxies. This is the same approach the old,
- *      working transfersregister app used (old/transfersregister/js/nahdi-api.js)
- *      and needs no deployment, so the fallback works out of the box.
+ * The API replies with a fixed `Access-Control-Allow-Origin:
+ * https://www.nahdionline.com`, so a browser page cannot call it directly. All
+ * requests therefore go through NAHDI_PROXY_BASE — a self-hosted Cloudflare
+ * Worker (see nahdi-proxy-worker.js) that re-serves the JSON with
+ * `Access-Control-Allow-Origin: *` and adds the browser User-Agent that Nahdi's
+ * CloudFront WAF requires.
+ *
+ * Public CORS proxies are deliberately NOT used as a fallback: corsproxy.io now
+ * rejects keyless URLs (403), allorigins `/raw` returns 522, and allorigins
+ * `/get` answered roughly 1 request in 5 when measured. A backstop that
+ * unreliable only turns a clean failure into a slow one.
  */
-export const NAHDI_PROXY_BASE = ''; // optional: 'https://nahdi-proxy.you.workers.dev'
+export const NAHDI_PROXY_BASE = 'https://nahdi-proxy.ephedrine2010.workers.dev';
 
-// Full Nahdi product endpoint. The extra params match the old working app.
-var API_BASE = 'https://www.nahdionline.com/api/analytics/product';
-
-// Public CORS proxies, tried in order until one returns JSON. Ported verbatim
-// from the old working nahdi-api.js.
-var CORS_PROXIES = [
-    function (url) { return 'https://corsproxy.io/?' + encodeURIComponent(url); },
-    function (url) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url); },
-];
+var FETCH_TIMEOUT_MS = 10000;
 
 // sku -> resolved Nahdi item object, or null (looked up, nothing usable).
 // Shared by price and brand lookups so a SKU is fetched at most once.
 var itemCache = Object.create(null);
+
+// sku -> in-flight promise, so concurrent callers share one request.
+var pending = Object.create(null);
 
 /**
  * Choose the tag price from a Nahdi product object.
@@ -60,66 +59,68 @@ function toNum(v) {
 }
 
 /**
- * Build the list of proxied URLs to try for one SKU, in priority order:
- * the self-hosted Worker first (if configured), then the public CORS proxies.
+ * Build the Worker URL for one SKU.
+ *
+ * The param is `sku` (singular) — that is what the deployed Worker expects;
+ * `?skus=` gets a `400 bad sku`.
  * @param {string} sku
- * @returns {string[]}
+ * @returns {string}
  */
-function proxyUrlsForSku(sku) {
-    var urls = [];
-    if (NAHDI_PROXY_BASE) {
-        urls.push(
-            NAHDI_PROXY_BASE.replace(/\/+$/, '') + '/?skus=' + encodeURIComponent(sku)
-        );
-    }
-    // Public proxies wrap the FULL Nahdi API URL (with the params the old app used).
-    var apiUrl =
-        API_BASE +
-        '?skus=' + encodeURIComponent(sku) +
-        '&language=en&region=SA&category_id=15125';
-    for (var i = 0; i < CORS_PROXIES.length; i++) {
-        urls.push(CORS_PROXIES[i](apiUrl));
-    }
-    return urls;
+function proxyUrlForSku(sku) {
+    return (
+        NAHDI_PROXY_BASE.replace(/\/+$/, '') + '/?sku=' + encodeURIComponent(sku)
+    );
 }
 
 /**
- * Fetch a single SKU's Nahdi product object through a proxy. Cached per SKU.
- * Tries each proxy in turn and uses the first that returns usable JSON — same
- * strategy as the old working nahdi-api.js. Returns the product object (with
+ * Fetch a single SKU's Nahdi product object through the Worker. Cached per SKU
+ * and de-duplicated per in-flight SKU. Returns the product object (with
  * `price`, `shelf_price`, `item_brand`, …) or null.
  * @param {string|number} sku
  * @returns {Promise<object|null>}
  */
 export async function fetchNahdiItem(sku) {
     sku = String(sku == null ? '' : sku).trim();
-    if (!sku) return null;
+    if (!sku || !nahdiEnabled()) return null;
     if (sku in itemCache) return itemCache[sku];
+    if (pending[sku]) return pending[sku];
 
-    var urls = proxyUrlsForSku(sku);
-    var data = null;
+    pending[sku] = doFetch(sku);
+    try {
+        return await pending[sku];
+    } finally {
+        delete pending[sku];
+    }
+}
 
-    for (var i = 0; i < urls.length; i++) {
-        try {
-            var res = await fetch(urls[i], { headers: { Accept: 'application/json' } });
-            if (res.ok) {
-                data = await res.json();
-                if (data) break;
-            }
-        } catch (_err) {
-            /* try next proxy */
+/**
+ * Internal: one request, with a timeout.
+ *
+ * An empty answer means Nahdi does not know the SKU, which IS cached. A network
+ * or Worker failure is usually transient, so that is NOT cached and a later
+ * lookup retries.
+ */
+async function doFetch(sku) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, FETCH_TIMEOUT_MS);
+    try {
+        var res = await fetch(proxyUrlForSku(sku), {
+            headers: { Accept: 'application/json' },
+            signal: controller.signal
+        });
+        if (res.ok) {
+            var data = await res.json();
+            var obj = Array.isArray(data) ? data[0] : data;
+            itemCache[sku] = obj || null;
+            return itemCache[sku];
         }
+        console.warn('NahdiApi: proxy returned ' + res.status + ' for SKU ' + sku);
+    } catch (_err) {
+        console.warn('NahdiApi: proxy request failed for SKU ' + sku);
+    } finally {
+        clearTimeout(timer);
     }
-
-    if (!data) {
-        console.warn('NahdiApi: all proxies failed for SKU ' + sku);
-        itemCache[sku] = null;
-        return null;
-    }
-
-    var obj = Array.isArray(data) ? data[0] : data;
-    itemCache[sku] = obj || null;
-    return itemCache[sku];
+    return null;
 }
 
 /**
@@ -144,9 +145,9 @@ export async function fetchNahdiBrand(sku) {
 }
 
 /**
- * True when a price fallback path exists. Public CORS proxies are always
- * available, so this is now always on.
+ * True when a price fallback path exists. With the Worker as the only route,
+ * that means NAHDI_PROXY_BASE is configured.
  */
 export function nahdiEnabled() {
-    return true;
+    return !!NAHDI_PROXY_BASE;
 }

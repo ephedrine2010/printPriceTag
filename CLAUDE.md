@@ -20,6 +20,9 @@ barcode preview in the results table's Barcode column.
 - **Chrome or Edge required.** Master-file loading uses the File System Access API
   (`window.showOpenFilePicker`); the app shows an error banner in browsers without it.
 - There is no build, lint, or test tooling in this repo.
+- [connectivity-check.html](connectivity-check.html) is a standalone diagnostic: open it on
+  a device behind a web filter and it reports which hosts that device can reach. Use it
+  before changing where the Nahdi proxy lives — see step 6.
 
 ## Data contracts (easy to get wrong)
 
@@ -78,27 +81,52 @@ print matched rows.
    **missing price** and to resolve the **brand** for smart marking. One fetch per SKU
    serves both; results are cached per SKU for the session.
 
-   - **The Cloudflare Worker is the only route.** Nahdi returns a fixed
-     `Access-Control-Allow-Origin: https://www.nahdionline.com`, so the browser cannot
-     call it directly. Every request goes through `NAHDI_PROXY_BASE`
-     ([nahdi-proxy-worker.js](nahdi-proxy-worker.js), deployed at
-     `nahdi-proxy.ephedrine2010.workers.dev`). Public CORS proxies were tried as a
-     fallback and **removed** — corsproxy.io now needs an API key, allorigins and codetabs
-     answer `522` most of the time. Do not re-add one without measuring it first.
+   `fetchNahdiItem` resolves in three steps, and **the network is last**:
+
+   1. the session's in-memory cache;
+   2. `assets/nahdi-cache.json` via [js/nahdi-cache.js](js/nahdi-cache.js) — committed to
+      the repo, so it loads **same-origin** and works on any device that can open the app;
+   3. the Cloudflare Worker at `NAHDI_PROXY_BASE`.
+
+   - **Why the cache exists: some devices cannot reach any proxy.** Their web filter
+     allows only a short domain list. Measured on one (2026-09-21):
+     `workers.dev`, `azurewebsites.net` and `azurestaticapps.net` are **blocked**, while
+     `raw.githubusercontent.com`, `api.github.com`, the app's own origin and
+     `nahdionline.com` are fine. Generic app-hosting domains are blocked as a category, so
+     **re-hosting the proxy does not fix it** — that is why the answer is a committed file
+     rather than a different Worker. Re-measure with
+     [connectivity-check.html](connectivity-check.html) before revisiting this.
+   - **Nahdi itself is unusable from the browser** even where it is reachable: every
+     endpoint either pins `Access-Control-Allow-Origin` to `https://www.nahdionline.com`
+     or sends none at all. A proxy is not optional; the cache is what replaces it.
+   - **The cache fills from real use.** A device that *can* reach the Worker records every
+     live result (`recordNahdiItem`), kept in `localStorage` across sessions. **Save price
+     cache** in the results header downloads the merged file; drop it over
+     `assets/nahdi-cache.json` and commit. The button only appears when there is something
+     new to save.
+   - **Circuit breaker.** A blocked request fails in ~4 s, so after
+     `MAX_CONSECUTIVE_FAILURES` (3) consecutive failures the Worker is abandoned for the
+     rest of the session (`nahdiProxyGaveUp()`) and the cache serves alone. Without this,
+     a blocked device would stall for minutes per query file.
    - **The deployed Worker takes `?sku=` (singular)**, not `?skus=`, which gets a
      `400 bad sku`. The Worker source in this repo accepts both, so the deployed copy is
      an older build. Redeploying would align them but buys nothing: the Nahdi API itself
      **does not batch** — `skus=a,b,c` returns only the first item (measured), so one
      request per SKU is the only option.
-   - A SKU Nahdi does not know is cached as "nothing"; a Worker or network failure is
-     **not** cached, so re-running the lookup retries it (within one rendered result set a
-     row is tried once — `_nahdiTried`). Each request has a 10 s timeout, and concurrent
-     lookups of the same SKU share one request.
+   - Public CORS proxies were tried as a fallback and **removed** — corsproxy.io now needs
+     an API key, allorigins and codetabs answer `522` most of the time. Do not re-add one
+     without measuring it first.
+   - A SKU Nahdi does not know is cached as "nothing" and **not** written to the cache
+     file; a Worker or network failure is not cached either, so re-running the lookup
+     retries it (within one rendered result set a row is tried once — `_nahdiTried`).
+     Each request has a 10 s timeout, and concurrent lookups of the same SKU share one
+     request.
    - Nahdi prices are already VAT-inclusive, so the VAT toggle is not re-applied to them.
      `pickNahdiPrice()` takes the higher of `price` and `shelf_price` — that is the legacy
-     Dart behaviour, not a bug.
-   - Clearing `NAHDI_PROXY_BASE` makes the whole feature a silent no-op (`nahdiEnabled()`
-     returns `false`); prices stay `—` and nothing is marked smart.
+     Dart behaviour, not a bug. The cache stores the **already-resolved** price and hands
+     it back in a Nahdi-shaped object, so callers cannot tell the two sources apart.
+   - `nahdiEnabled()` is now always `true`, because the cache is always a source. Clearing
+     `NAHDI_PROXY_BASE` no longer disables the feature — it makes the app **cache-only**.
 
    Full detail:
    [documentations/nahdi-price-fallback.md](documentations/nahdi-price-fallback.md).

@@ -189,12 +189,74 @@ reference).
 
 ---
 
-## 8. Files
+## 8. Blocked devices, and the committed cache
+
+Some devices sit behind a web filter with a short allow-list. Measured on one of them
+with [`connectivity-check.html`](../connectivity-check.html) on **2026-09-21**:
+
+| Host | Result |
+|---|---|
+| the app's own origin (`ephedrine2010.github.io`) | reachable |
+| `www.nahdionline.com` | reachable (but never *readable* — see section 2) |
+| `nahdi-proxy.…workers.dev` | **blocked** |
+| `demo.azurewebsites.net` | **blocked** |
+| `….azurestaticapps.net` | **blocked** |
+| `raw.githubusercontent.com` | read, `HTTP 200`, real body |
+| `api.github.com` | read, `HTTP 200`, real body |
+
+The pattern is that **generic app-hosting domains are blocked as a category** — anyone can
+put anything on them. Cloudflare and Azure are blocked for the same reason, so moving the
+Worker to another host is not a fix. Only GitHub and the app's own origin get through.
+
+### The answer: ship the data, not a route to it
+
+[`assets/nahdi-cache.json`](../assets/nahdi-cache.json) is committed to the repo, so it is
+served **same-origin** from GitHub Pages. There is no CORS check, no proxy and no
+third-party host involved: if a device can open the app, it can read this file.
+
+```
+blocked device  ──▶  assets/nahdi-cache.json   (same origin, always works)
+normal device   ──▶  cache first, then the Worker for anything missing
+```
+
+**How it fills.** Devices that can reach the Worker record every live result
+(`recordNahdiItem`), persisted in `localStorage` so a day's lookups are not lost. The
+**Save price cache** button in the results header appears once there is something new,
+downloads the merged file, and you commit it over `assets/nahdi-cache.json`. The cache
+therefore grows around what you actually print, rather than needing the whole master —
+which matters, because `items.csv` never leaves your machine.
+
+**Entry shape** — the already-resolved price plus the brand, keyed by SKU:
+
+```json
+{ "updated": "2026-09-21T09:00:00.000Z",
+  "items": { "100015980": { "price": 8, "brand": "Panadol" } } }
+```
+
+Reads are handed back as a Nahdi-shaped object (`price`, `shelf_price`, `item_brand`), so
+`pickNahdiPrice()` and the smart-brand check work unchanged and neither knows nor cares
+which source answered.
+
+**Circuit breaker.** On a blocked device each request dies after ~4 s. After three
+consecutive failures the Worker is dropped for the rest of the session
+(`nahdiProxyGaveUp()`), so a query file of 200 rows costs one ~12 s stumble instead of
+minutes of dead waiting.
+
+**Staleness is the trade.** A blocked device shows whatever was last committed. Prices move
+slowly and brands barely at all, so this is usually fine — but it is the reason to keep
+saving the cache after a session on an unrestricted machine.
+
+---
+
+## 9. Files
 
 | File | Role |
 |---|---|
 | [`nahdi-proxy-worker.js`](../nahdi-proxy-worker.js) | Cloudflare Worker CORS proxy (deploy this) |
-| [`js/nahdi-price.js`](../js/nahdi-price.js) | `NAHDI_PROXY_BASE` config, `fetchNahdiPrice()`, `pickNahdiPrice()`, per-SKU cache |
+| [`js/nahdi-price.js`](../js/nahdi-price.js) | `NAHDI_PROXY_BASE` config, `fetchNahdiPrice()`, `pickNahdiPrice()`, per-SKU cache, circuit breaker |
+| [`js/nahdi-cache.js`](../js/nahdi-cache.js) | committed offline cache: load, lookup, record, export |
+| [`assets/nahdi-cache.json`](../assets/nahdi-cache.json) | the cache itself — commit updates to it |
+| [`connectivity-check.html`](../connectivity-check.html) | diagnostic: what a restricted device can reach |
 | [`js/master-worker.js`](../js/master-worker.js) | now stores `sku` on each master row |
 | [`js/results-export.js`](../js/results-export.js) | carries `sku` through lookup results |
 | [`js/app.js`](../js/app.js) | `autoFillMissingPrices()` orchestration, row rendering, SKU column |
@@ -202,7 +264,7 @@ reference).
 
 ---
 
-## 9. Notes & limits
+## 10. Notes & limits
 
 - **Batching does not work.** `skus=a,b,c` returns only the **first** item (measured
   2026-09-21), so the app fetches one SKU per request and there is no batching win to be

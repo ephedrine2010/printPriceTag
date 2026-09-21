@@ -4,6 +4,7 @@ import { runLookups } from './results-export.js';
 import { lookupRowIndex, priceWithVat, displayCode } from './search-logic.js';
 import { openPriceTagsPrint } from './print/open-price-tags-print.js';
 import { fetchNahdiItem, pickNahdiPrice, nahdiEnabled } from './nahdi-price.js';
+import { exportNahdiCache, nahdiCacheStats } from './nahdi-cache.js';
 import { loadSmartBrands, isSmartBrand } from './smart-brands.js';
 import { saveMasterHandle } from './master-handle-store.js';
 
@@ -19,6 +20,7 @@ import { saveMasterHandle } from './master-handle-store.js';
     var elRunQuery = document.getElementById('btn-run-query');
     var elVatInclusive = document.getElementById('chk-vat-inclusive');
     var elPrintTags = document.getElementById('btn-print-tags');
+    var elSaveCache = document.getElementById('btn-save-cache');
 
     var elManualCode = document.getElementById('manual-code');
     var elManualLookup = document.getElementById('btn-manual-lookup');
@@ -451,6 +453,20 @@ import { saveMasterHandle } from './master-handle-store.js';
         var c = Math.min(CONCURRENCY, targets.length);
         for (i = 0; i < c; i++) runners.push(runner());
         await Promise.all(runners);
+
+        updateSaveCacheButton();
+    }
+
+    /**
+     * Show "Save price cache" only when this session fetched something the
+     * committed cache file does not have yet. Devices that cannot reach the
+     * Worker never fetch, so they never see the button.
+     */
+    function updateSaveCacheButton() {
+        if (!elSaveCache) return;
+        var stats = nahdiCacheStats();
+        elSaveCache.hidden = stats.pending === 0;
+        elSaveCache.textContent = 'Save price cache (' + stats.pending + ' new)';
     }
 
     function escapeHtml(s) {
@@ -585,6 +601,20 @@ import { saveMasterHandle } from './master-handle-store.js';
         startAutoFillNahdi();
     });
     elPrintTags.addEventListener('click', onPrintTags);
+    if (elSaveCache) {
+        elSaveCache.addEventListener('click', function () {
+            var total = exportNahdiCache();
+            // Deliberately NOT cleared afterwards: the download may be cancelled,
+            // and re-exporting a few extra rows is harmless. The pending set is
+            // cleared only when the saved file is deployed and loads as the
+            // committed cache.
+            alert(
+                'Saved nahdi-cache.json with ' + total + ' items.\n\n' +
+                'Put it in assets/nahdi-cache.json and commit it, so devices that ' +
+                'cannot reach the price service get these prices too.'
+            );
+        });
+    }
 
     elResultsBody.addEventListener('click', function (e) {
         var copyBtn =

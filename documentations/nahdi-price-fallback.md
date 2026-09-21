@@ -204,11 +204,9 @@ reference).
 
 ## 9. Notes & limits
 
-- **Batching** (`skus=a,b,c`) is unconfirmed — the API might return only the first match.
-  Current code fetches **one SKU per request**. If batching is confirmed later, the proxy
-  already forwards a comma-separated `skus`, so only the app-side loop needs changing
-  — though the **deployed** Worker is an older build that accepts only `?sku=`, so it
-  would need redeploying from [`nahdi-proxy-worker.js`](../nahdi-proxy-worker.js) first.
+- **Batching does not work.** `skus=a,b,c` returns only the **first** item (measured
+  2026-09-21), so the app fetches one SKU per request and there is no batching win to be
+  had. The Worker forwards a comma-separated `skus` unchanged, but Nahdi ignores the rest.
 - Rows with **no SKU** or a SKU that Nahdi does not know stay `—` and, if printed, still
   render a blank-price tag. If that is undesirable, exclude still-empty found rows from
   printing.

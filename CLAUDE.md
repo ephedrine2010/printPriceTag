@@ -87,7 +87,9 @@ print matched rows.
      answer `522` most of the time. Do not re-add one without measuring it first.
    - **The deployed Worker takes `?sku=` (singular)**, not `?skus=`, which gets a
      `400 bad sku`. The Worker source in this repo accepts both, so the deployed copy is
-     an older build — redeploy it before relying on `?skus=` batching.
+     an older build. Redeploying would align them but buys nothing: the Nahdi API itself
+     **does not batch** — `skus=a,b,c` returns only the first item (measured), so one
+     request per SKU is the only option.
    - A SKU Nahdi does not know is cached as "nothing"; a Worker or network failure is
      **not** cached, so re-running the lookup retries it (within one rendered result set a
      row is tried once — `_nahdiTried`). Each request has a 10 s timeout, and concurrent

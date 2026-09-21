@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connectivity Check</title>
+<style>
+  :root { --bg:#fff; --fg:#1b1f23; --muted:#6a737d; --line:#e1e4e8;
+          --ok:#1a7f37; --bad:#cf222e; --warn:#9a6700; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d;
+            --ok:#3fb950; --bad:#f85149; --warn:#d29922; }
+  }
+  body { background:var(--bg); color:var(--fg); margin:0; padding:24px 16px;
+         font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; }
+  .wrap { max-width:820px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 20px; }
+  table { border-collapse:collapse; width:100%; }
+  th,td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line);
+          vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  td.host { font-family:ui-monospace,Consolas,monospace; font-size:12px; word-break:break-all; }
+  .ok { color:var(--ok); font-weight:600; }
+  .bad { color:var(--bad); font-weight:600; }
+  .warn { color:var(--warn); font-weight:600; }
+  .note { font-size:12px; color:var(--muted); }
+  #verdict { margin:20px 0 0; padding:12px 14px; border:1px solid var(--line);
+             border-radius:6px; background:rgba(127,127,127,.06); }
+  button { font:inherit; padding:7px 14px; border:1px solid var(--line);
+           border-radius:6px; background:transparent; color:var(--fg); cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Connectivity Check</h1>
+  <p class="sub">Open this page <strong>on a restricted device</strong>. It reports which
+  hosts that device can reach, so we know where to put the Nahdi proxy. Nothing is stored
+  or sent anywhere.</p>
+
+  <table>
+    <thead><tr><th>What</th><th>Host</th><th>Result</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <div id="verdict">Running&hellip;</div>
+  <p><button id="again">Run again</button></p>
+
+  <p class="note">
+    <strong>read</strong> = the page fetched and read real data (definitive).<br>
+    <strong>reachable</strong> = the host answered but the response is opaque, so a filter
+    that serves a block <em>page</em> could still look like this. Treat it as a good sign,
+    not proof.<br>
+    <strong>blocked</strong> = the request never completed (DNS, TLS or connection refused).
+  </p>
+</div>
+
+<script>
+// Each target: how it is tested decides how much we learn.
+//   mode 'read'  - CORS-enabled host, so we read the body: a definitive answer.
+//   mode 'reach' - no CORS, so an opaque no-cors response only proves we got through.
+var TARGETS = [
+    {
+        label: 'This app (same origin)',
+        url: location.origin + location.pathname + '?cachebust=' + Date.now(),
+        mode: 'reach',
+        why: 'baseline - if this fails nothing else means anything'
+    },
+    {
+        label: 'Nahdi site',
+        url: 'https://www.nahdionline.com/api/analytics/product?skus=100015980&language=en&region=SA&category_id=15125',
+        mode: 'reach',
+        why: 'the API itself; reachable but not readable (fixed CORS header)'
+    },
+    {
+        label: 'Cloudflare Worker (current proxy)',
+        url: 'https://nahdi-proxy.ephedrine2010.workers.dev/?sku=100015980',
+        mode: 'read',
+        why: 'what the app uses today'
+    },
+    {
+        label: 'GitHub raw',
+        url: 'https://raw.githubusercontent.com/github/gitignore/main/README.md',
+        mode: 'read',
+        why: 'option: serve a pre-built price cache from the repo'
+    },
+    {
+        label: 'GitHub API',
+        url: 'https://api.github.com/rate_limit',
+        mode: 'read',
+        why: 'option: GitHub-hosted data'
+    },
+    {
+        label: 'Azure App Service',
+        url: 'https://demo.azurewebsites.net/',
+        mode: 'reach',
+        why: 'option: host the proxy as an Azure Function'
+    },
+    {
+        label: 'Azure Static Web Apps',
+        url: 'https://thishostdoesnotexist12345.azurestaticapps.net/',
+        mode: 'reach',
+        why: 'option: Azure Static Web Apps managed API'
+    }
+];
+
+var TIMEOUT_MS = 12000;
+
+function testTarget(t) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, TIMEOUT_MS);
+    var started = Date.now();
+    var opts = { signal: controller.signal, cache: 'no-store' };
+    if (t.mode === 'reach') opts.mode = 'no-cors';
+
+    return fetch(t.url, opts).then(function (res) {
+        clearTimeout(timer);
+        var ms = Date.now() - started;
+        if (t.mode === 'read') {
+            return res.text().then(function (body) {
+                return {
+                    state: res.ok && body ? 'read' : 'warn',
+                    ms: ms,
+                    detail: 'HTTP ' + res.status + ', ' + body.length + ' bytes'
+                };
+            });
+        }
+        return { state: 'reach', ms: ms, detail: 'opaque response' };
+    }).catch(function (err) {
+        clearTimeout(timer);
+        return {
+            state: 'blocked',
+            ms: Date.now() - started,
+            detail: err && err.name === 'AbortError' ? 'timed out' : 'network error'
+        };
+    });
+}
+
+var LABELS = {
+    read: ['ok', 'read'],
+    reach: ['ok', 'reachable'],
+    warn: ['warn', 'answered, odd response'],
+    blocked: ['bad', 'blocked']
+};
+
+function run() {
+    var tbody = document.getElementById('rows');
+    tbody.innerHTML = '';
+    document.getElementById('verdict').textContent = 'Running...';
+
+    var results = [];
+    var pending = TARGETS.length;
+
+    TARGETS.forEach(function (t) {
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+            '<td>' + t.label + '<div class="note">' + t.why + '</div></td>' +
+            '<td class="host">' + t.url.replace(/^https?:\/\//, '').split('/')[0] + '</td>' +
+            '<td>testing...</td>';
+        tbody.appendChild(tr);
+
+        testTarget(t).then(function (r) {
+            var l = LABELS[r.state];
+            tr.cells[2].innerHTML =
+                '<span class="' + l[0] + '">' + l[1] + '</span>' +
+                '<div class="note">' + r.detail + ' &middot; ' + r.ms + ' ms</div>';
+            results.push({ t: t, r: r });
+            if (--pending === 0) verdict(results);
+        });
+    });
+}
+
+function verdict(results) {
+    function stateOf(label) {
+        for (var i = 0; i < results.length; i++) {
+            if (results[i].t.label === label) return results[i].r.state;
+        }
+        return 'blocked';
+    }
+    var worker = stateOf('Cloudflare Worker (current proxy)');
+    var gh = stateOf('GitHub raw');
+    var azure = stateOf('Azure App Service');
+    var swa = stateOf('Azure Static Web Apps');
+
+    var lines = [];
+    if (worker === 'read') {
+        lines.push('This device works with the app as it is - the Cloudflare Worker is reachable.');
+    } else {
+        lines.push('<strong>The Cloudflare Worker is blocked here.</strong> That is the failure you are seeing.');
+        if (azure === 'reach' || swa === 'reach') {
+            lines.push('Azure is reachable (' +
+                (azure === 'reach' ? 'App Service' : '') +
+                (azure === 'reach' && swa === 'reach' ? ' and ' : '') +
+                (swa === 'reach' ? 'Static Web Apps' : '') +
+                ') - re-deploy the proxy there and point NAHDI_PROXY_BASE at it.');
+        } else if (gh === 'read') {
+            lines.push('Azure is blocked too, but GitHub is readable - a pre-built price cache ' +
+                'served from the repo is the remaining route.');
+        } else {
+            lines.push('No candidate host got through. Ask IT to allow one specific hostname.');
+        }
+    }
+    document.getElementById('verdict').innerHTML = lines.join('<br>');
+}
+
+document.getElementById('again').addEventListener('click', run);
+run();
+</script>
+</body>
+</html>

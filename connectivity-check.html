@@ -33,10 +33,10 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Connectivity Check</h1>
-  <p class="sub">Open this page <strong>on a restricted device</strong>. It reports which
-  hosts that device can reach, so we know where to put the Nahdi proxy. Nothing is stored
-  or sent anywhere.</p>
+  <h1>Connectivity Check &mdash; round 3</h1>
+  <p class="sub">Open this page <strong>on a restricted device</strong>. Every hosting provider we tried is blocked, so this round tests
+  <strong>ordinary websites</strong> instead. The answer decides whether buying a domain
+  name would fix this or waste your money. Nothing is stored or sent anywhere.</p>
 
   <table>
     <thead><tr><th>What</th><th>Host</th><th>Result</th></tr></thead>
@@ -84,56 +84,45 @@ var TARGETS = [
         mode: 'read',
         why: 'known good - GitHub is Microsoft-owned'
     },
-    // Round 2: somewhere to put the proxy. Any ONE of these being reachable
-    // fixes the problem with a one-line change, at no cost.
+    // Round 3. Every host tested so far was an app-hosting provider, and all of
+    // them are blocked. These are ORDINARY websites instead. The question they
+    // answer: does the filter block a list of bad things (so an unknown domain
+    // gets through), or allow only a list of good things (so nothing new ever
+    // gets through)? That decides whether buying a domain would help at all.
     {
-        label: 'Google Apps Script',
-        url: 'https://script.google.com/',
+        label: 'Microsoft Office',
+        url: 'https://www.office.com/',
         mode: 'reach',
-        candidate: true,
-        why: 'free proxy host, no card needed'
+        control: true,
+        why: 'control - this should pass'
     },
     {
-        label: 'Google Apps Script (content)',
-        url: 'https://script.googleusercontent.com/',
+        label: 'example.com',
+        url: 'https://example.com/',
         mode: 'reach',
-        candidate: true,
-        why: 'where Apps Script actually serves from - must ALSO pass'
+        ordinary: true,
+        why: 'a plain, harmless, unremarkable domain'
     },
     {
-        label: 'Vercel',
-        url: 'https://vercel.app/',
+        label: 'iana.org',
+        url: 'https://www.iana.org/',
         mode: 'reach',
-        candidate: true,
-        why: 'free proxy host'
+        ordinary: true,
+        why: 'obscure but entirely legitimate'
     },
     {
-        label: 'Netlify',
-        url: 'https://netlify.app/',
+        label: 'Wikipedia',
+        url: 'https://www.wikipedia.org/',
         mode: 'reach',
-        candidate: true,
-        why: 'free proxy host'
+        ordinary: true,
+        why: 'well known, rarely blocked'
     },
     {
-        label: 'Deno Deploy',
-        url: 'https://deno.dev/',
-        mode: 'reach',
-        candidate: true,
-        why: 'free proxy host'
-    },
-    {
-        label: 'Render',
-        url: 'https://onrender.com/',
-        mode: 'reach',
-        candidate: true,
-        why: 'free proxy host'
-    },
-    {
-        label: 'Cloudflare Pages',
-        url: 'https://pages.dev/',
-        mode: 'reach',
-        candidate: true,
-        why: 'same company as the blocked Worker - probably blocked too'
+        label: 'httpbin.org',
+        url: 'https://httpbin.org/get',
+        mode: 'read',
+        ordinary: true,
+        why: 'small site, readable, not a hosting provider'
     }
 ];
 
@@ -211,25 +200,21 @@ function verdict(results) {
         return 'blocked';
     }
 
-    var worker = stateOf('Cloudflare Worker (current proxy)');
-    var open = results.filter(function (x) {
-        return x.t.candidate && (x.r.state === 'reach' || x.r.state === 'read');
+    var ordinaryOpen = results.filter(function (x) {
+        return x.t.ordinary && (x.r.state === 'reach' || x.r.state === 'read');
     }).map(function (x) { return x.t.label; });
 
     var lines = [];
-    if (worker === 'read') {
-        lines.push('This device is fine as it is - the current proxy is reachable.');
+    if (ordinaryOpen.length) {
+        lines.push('<strong>Ordinary websites get through</strong> (' +
+            ordinaryOpen.join(', ') + ').');
+        lines.push('So the filter blocks a list of bad things, not everything. ' +
+            'A domain name of your own would very likely work - that is the fix to buy.');
     } else {
-        lines.push('<strong>The current proxy is blocked on this device.</strong>');
-        if (open.length) {
-            lines.push('But these got through: <strong>' + open.join(', ') + '</strong>.');
-            lines.push('Moving the proxy to one of them is a one-line fix, and free.');
-        } else {
-            lines.push('No free host got through either - the filter blocks app-hosting ' +
-                'domains as a group.');
-            lines.push('Remaining options: put the proxy on your own domain name, or ask IT ' +
-                'to allow one hostname.');
-        }
+        lines.push('<strong>Nothing ordinary gets through.</strong> Only work sites are allowed.');
+        lines.push('This is an allow-list, so buying a domain would NOT help - it would be ' +
+            'blocked like everything else.');
+        lines.push('The only real fix is asking IT to allow one address.');
     }
     document.getElementById('verdict').innerHTML = lines.join('<br>');
 }

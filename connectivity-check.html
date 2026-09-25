@@ -82,25 +82,58 @@ var TARGETS = [
         label: 'GitHub raw',
         url: 'https://raw.githubusercontent.com/github/gitignore/main/README.md',
         mode: 'read',
-        why: 'option: serve a pre-built price cache from the repo'
+        why: 'known good - GitHub is Microsoft-owned'
     },
+    // Round 2: somewhere to put the proxy. Any ONE of these being reachable
+    // fixes the problem with a one-line change, at no cost.
     {
-        label: 'GitHub API',
-        url: 'https://api.github.com/rate_limit',
-        mode: 'read',
-        why: 'option: GitHub-hosted data'
-    },
-    {
-        label: 'Azure App Service',
-        url: 'https://demo.azurewebsites.net/',
+        label: 'Google Apps Script',
+        url: 'https://script.google.com/',
         mode: 'reach',
-        why: 'option: host the proxy as an Azure Function'
+        candidate: true,
+        why: 'free proxy host, no card needed'
     },
     {
-        label: 'Azure Static Web Apps',
-        url: 'https://thishostdoesnotexist12345.azurestaticapps.net/',
+        label: 'Google Apps Script (content)',
+        url: 'https://script.googleusercontent.com/',
         mode: 'reach',
-        why: 'option: Azure Static Web Apps managed API'
+        candidate: true,
+        why: 'where Apps Script actually serves from - must ALSO pass'
+    },
+    {
+        label: 'Vercel',
+        url: 'https://vercel.app/',
+        mode: 'reach',
+        candidate: true,
+        why: 'free proxy host'
+    },
+    {
+        label: 'Netlify',
+        url: 'https://netlify.app/',
+        mode: 'reach',
+        candidate: true,
+        why: 'free proxy host'
+    },
+    {
+        label: 'Deno Deploy',
+        url: 'https://deno.dev/',
+        mode: 'reach',
+        candidate: true,
+        why: 'free proxy host'
+    },
+    {
+        label: 'Render',
+        url: 'https://onrender.com/',
+        mode: 'reach',
+        candidate: true,
+        why: 'free proxy host'
+    },
+    {
+        label: 'Cloudflare Pages',
+        url: 'https://pages.dev/',
+        mode: 'reach',
+        candidate: true,
+        why: 'same company as the blocked Worker - probably blocked too'
     }
 ];
 
@@ -177,27 +210,25 @@ function verdict(results) {
         }
         return 'blocked';
     }
+
     var worker = stateOf('Cloudflare Worker (current proxy)');
-    var gh = stateOf('GitHub raw');
-    var azure = stateOf('Azure App Service');
-    var swa = stateOf('Azure Static Web Apps');
+    var open = results.filter(function (x) {
+        return x.t.candidate && (x.r.state === 'reach' || x.r.state === 'read');
+    }).map(function (x) { return x.t.label; });
 
     var lines = [];
     if (worker === 'read') {
-        lines.push('This device works with the app as it is - the Cloudflare Worker is reachable.');
+        lines.push('This device is fine as it is - the current proxy is reachable.');
     } else {
-        lines.push('<strong>The Cloudflare Worker is blocked here.</strong> That is the failure you are seeing.');
-        if (azure === 'reach' || swa === 'reach') {
-            lines.push('Azure is reachable (' +
-                (azure === 'reach' ? 'App Service' : '') +
-                (azure === 'reach' && swa === 'reach' ? ' and ' : '') +
-                (swa === 'reach' ? 'Static Web Apps' : '') +
-                ') - re-deploy the proxy there and point NAHDI_PROXY_BASE at it.');
-        } else if (gh === 'read') {
-            lines.push('Azure is blocked too, but GitHub is readable - a pre-built price cache ' +
-                'served from the repo is the remaining route.');
+        lines.push('<strong>The current proxy is blocked on this device.</strong>');
+        if (open.length) {
+            lines.push('But these got through: <strong>' + open.join(', ') + '</strong>.');
+            lines.push('Moving the proxy to one of them is a one-line fix, and free.');
         } else {
-            lines.push('No candidate host got through. Ask IT to allow one specific hostname.');
+            lines.push('No free host got through either - the filter blocks app-hosting ' +
+                'domains as a group.');
+            lines.push('Remaining options: put the proxy on your own domain name, or ask IT ' +
+                'to allow one hostname.');
         }
     }
     document.getElementById('verdict').innerHTML = lines.join('<br>');
